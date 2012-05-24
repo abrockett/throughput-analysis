@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ThroughputApp</title>
+    
+    <script type="text/javascript" src="/apps/2.0p/sdk.js"></script>
+    
+    <script type="text/javascript">
+        Rally.onReady(function() {
+            Ext.define('CustomApp', {
+                extend: 'Rally.app.App',
+                componentCls: 'app',
+                layout: {
+                    type: 'vbox',
+                    align: 'stretch'
+                },
+                items:[
+                    {
+                        xtype: 'panel',
+                        itemId: 'gridHolder',
+                        layout: 'fit',
+                        height: 400
+                    }
+                ],
+                launch: function() {
+                    var query = {
+                        "ObjectID": {$gt:0},
+                        "Project": 1971104447,
+                        "ScheduleState": {$gte: "Completed"},
+                        "_PreviousValues.ScheduleState": {$lt: "Completed"},
+                        "_ValidFrom": {
+                          $gte: "2012-01-01TZ",
+                          $lt: "2012-05-22TZ"
+                        }
+                    };
+                    var selectedFields = "ObjectID, _ValidFrom, _ValidTo, _UnformattedID, _PreviousValues, ScheduleState, Name";
+                    selectedFields = selectedFields.split(', ');
+                    var sort = {'ObjectID' : -1, '_SnapshotNumber': 1};
+                    var pageSize = 100;
+            
+                    var callback = Ext.bind(this.processSnapshots, this);
+                    this.doSearch(query, selectedFields, sort, pageSize, callback);
+                },
+                
+                doSearch: function(query, fields, sort, pageSize, callback){
+                    var workspace = this.context.getWorkspace().ObjectID;
+                    var queryUrl = 'https://rally1.rallydev.com/analytics/1.32/'+ workspace +
+                                    '/artifact/snapshot/query.js';
+                    var params = {
+                        find: Ext.JSON.encode(query)
+                    };
+                    
+                    if (fields){
+                        //TODO can't handle $slice expression
+                        params.fields = Ext.JSON.encode(fields);
+                    }
+                    
+                    if (sort){
+                        params.sort = Ext.JSON.encode(sort);
+                    }
+                    
+                    if (pageSize){
+                        params.pagesize = pageSize;
+                    }
+                    
+                    Ext.Ajax.cors = true;
+                    Ext.Ajax.request({
+                        url: queryUrl,
+                        method: 'GET',
+                        params: params,
+                        success: function(response){
+                            var text = response.responseText;
+                            var json = Ext.JSON.decode(text);
+                            callback(json.Results);
+                        }
+                    });
+                },
+                
+                processSnapshots: function(snapshots) {
+                    
+                    var ReadableStates = {
+                        41529074 : "Idea",
+                        41529075 : "Defined",
+                        41529076 : "In-Progress",
+                        41529077 : "Completed",
+                        41529078 : "Accepted",
+                        41529079 : "Released"
+                    }
+                    
+                    var processedSnapshots = [];
+                    Ext.Array.each(snapshots, function(snapshot, index) {
+                        snap = {};
+                        for (var key in snapshot) {
+                            if (key === '_PreviousValues') {
+                                if (snapshot._PreviousValues.ScheduleState) {
+                                    snap["PreviousScheduleState"] = ReadableStates[snapshot._PreviousValues.ScheduleState]; 
+                                } else {
+                                    snap["PreviousScheduleState"] = 'No previous state';
+                                }
+                            } else if (key === 'ScheduleState') {
+                                snap["ScheduleState"] = ReadableStates[snapshot.ScheduleState];
+                            } else {
+                                snap[key] = snapshot[key];
+                            }
+                        }
+                        processedSnapshots.push(snap);
+                    });
+                    
+                    console.log(processedSnapshots);
+                
+                    var selectedFields = this.getFieldsFromSnapshots(processedSnapshots);
+                    
+                    var snapshotStore = Ext.create('Ext.data.Store', {
+                        storeId:'snapshotStore',
+                        fields: selectedFields,
+                        data: {'items': processedSnapshots},
+                        proxy: {
+                            type: 'memory',
+                            reader: {
+                                type: 'json',
+                                root: 'items'
+                            }
+                        }
+                    });
+                    
+                    var columns = this.createColumnsForFields(selectedFields);
+                    var snapshotGrid = Ext.create('Ext.grid.Panel', {
+                        title: 'Snapshots',
+                        //store: Ext.data.StoreManager.lookup('snapshotStore'),
+                        store: snapshotStore,
+                        columns: columns
+                    });
+                    
+                    var gridHolder = this.down('#gridHolder');
+                    gridHolder.removeAll(true);
+                    gridHolder.add(snapshotGrid);
+                },
+                
+                getFieldsFromSnapshots: function(snapshots){
+                    if(snapshots.length === 0){
+                        return [];
+                    }
+                    
+                    var snapshot = snapshots[0];
+                    var fields = [];
+                    for (var key in snapshot) {
+                        if (snapshot.hasOwnProperty(key)) {
+                            fields.push(key);
+                        }
+                    }
+                    
+                    return fields;
+                },
+                
+                createColumnsForFields: function(fields){
+                    var columns = [];
+                    for(var i=0; i < fields.length; ++i){
+                        var col = {
+                            header: fields[i],
+                            dataIndex: fields[i]
+                        };
+                        
+                        if(fields[i] === 'Name'){
+                            col.flex = 1;
+                        }
+                        columns.push(col);
+                    }
+                    
+                    return columns;
+                }
+            });
+
+            Rally.launchApp('CustomApp', {
+                name: 'LookbackApp'
+            });
+        });
+    </script>
+
+    <style type="text/css">
+        .app {
+             /* Add app styles here */
+        }
+    </style>
+</head>
+<body></body>
+</html>
