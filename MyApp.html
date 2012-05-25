@@ -26,16 +26,16 @@
                     var query = {
                         "ObjectID": {$gt:0},
                         "Project": 1971104447,
-                        "ScheduleState": {$gte: "Completed"},
-                        "_PreviousValues.ScheduleState": {$lt: "Completed"},
+                        "ScheduleState": "Accepted",
+                        "_PreviousValues.ScheduleState": {'$exists':true},
                         "_ValidFrom": {
                           $gte: "2012-01-01TZ",
-                          $lt: "2012-05-22TZ"
+                          $lt: "2012-06-01TZ"
                         }
                     };
-                    var selectedFields = "ObjectID, _ValidFrom, _ValidTo, _UnformattedID, _PreviousValues, ScheduleState, Name";
+                    var selectedFields = "ObjectID, _Type, _ValidFrom, _ValidTo, AcceptedDate, _PreviousValues, ScheduleState, Name";
                     selectedFields = selectedFields.split(', ');
-                    var sort = {'ObjectID' : -1, '_SnapshotNumber': 1};
+                    var sort = {'ObjectID' : -1, '_ValidFrom': -1};
                     var pageSize = 100;
             
                     var callback = Ext.bind(this.processSnapshots, this);
@@ -85,7 +85,7 @@
                         41529077 : "Completed",
                         41529078 : "Accepted",
                         41529079 : "Released"
-                    }
+                    };
                     
                     var processedSnapshots = [];
                     Ext.Array.each(snapshots, function(snapshot, index) {
@@ -93,20 +93,20 @@
                         for (var key in snapshot) {
                             if (key === '_PreviousValues') {
                                 if (snapshot._PreviousValues.ScheduleState) {
-                                    snap["PreviousScheduleState"] = ReadableStates[snapshot._PreviousValues.ScheduleState]; 
+                                    snap['PreviousScheduleState'] = ReadableStates[snapshot._PreviousValues.ScheduleState]; 
                                 } else {
-                                    snap["PreviousScheduleState"] = 'No previous state';
+                                    snap['PreviousScheduleState'] = 'No previous state';
                                 }
                             } else if (key === 'ScheduleState') {
-                                snap["ScheduleState"] = ReadableStates[snapshot.ScheduleState];
+                                snap['ScheduleState'] = ReadableStates[snapshot.ScheduleState];
+                            } else if (key === '_Type') {
+                                snap['_Type'] = snapshot._Type[snapshot._Type.length-1];
                             } else {
                                 snap[key] = snapshot[key];
                             }
                         }
                         processedSnapshots.push(snap);
                     });
-                    
-                    console.log(processedSnapshots);
                 
                     var selectedFields = this.getFieldsFromSnapshots(processedSnapshots);
                     
